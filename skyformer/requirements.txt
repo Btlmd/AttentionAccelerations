@@ -1,0 +1,9 @@
+performer-pytorch
+axial_positional_embedding
+local-attention
+fsspec
+wrapt
+opt_einsum
+gast
+astunparse
+einops

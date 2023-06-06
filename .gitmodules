@@ -1,0 +1,15 @@
+[submodule "reference/efficient-attention"]
+	path = reference/efficient-attention
+	url = https://github.com/HKUNLP/efficient-attention.git
+[submodule "reference/Diffuser"]
+	path = reference/Diffuser
+	url = https://github.com/asFeng/Diffuser.git
+[submodule "reference/Skyformer"]
+	path = reference/Skyformer
+	url = https://github.com/pkuzengqi/Skyformer.git
+[submodule "reference/cosFormer"]
+	path = reference/cosFormer
+	url = https://github.com/OpenNLPLab/cosFormer.git
+[submodule "reference/luna"]
+	path = reference/luna
+	url = git@github.com:sooftware/luna-transformer.git

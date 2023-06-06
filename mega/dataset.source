@@ -1,0 +1,6 @@
+set -ex
+
+MEGA_PATH="$(dirname `realpath $0`)"
+DATA_ROOT=`realpath $MEGA_PATH/../../data/mega`
+
+echo "DATA_ROOT: $DATA_ROOT"
