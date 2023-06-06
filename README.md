@@ -12,7 +12,7 @@ On Long Range Arena, we tried to reproduce results in [Skyformer](https://arxiv.
 
 - Download Preprocessed data from [TsinghuaCloud](https://cloud.tsinghua.edu.cn/d/76489e9a0b154692a502/)
 
-- Unzip `lra_data_mega.zip` and `lra_skyformer.zip` and make the directory structure as follows:
+- Unzip `lra_data_mega.zip` and `lra_data_skyformer.zip` and make the directory structure as follows:
 
 ```
 data/skyformer
