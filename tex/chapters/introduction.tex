@@ -1,0 +1,49 @@
+Transformer模型~\cite{vaswani2017attention}是用于序列建模的强大神经网络。它们已成功应用于各个领域，例如自然语言处理、计算机视觉、生物信息学等。 Transformer 模型的核心构建块是注意力机制，它捕获序列元素之间的复杂交互。与传统的循环神经网络（RNN）和卷积神经网络（CNN）相比，基于Transformer的架构在数据规模上通常更具可扩展性~\cite{brown2020language}，且在获取全局信息方面具有较弱的归纳偏差，因此在许多任务上表现出色。
+
+点积注意力机制和softmax归一化是Transformer捕捉长距离依赖关系的基石。
+然而，它在序列长度方面的二次空间和时间复杂度使得它的计算开销非常高，特别是对于较长的输入。这使得Transformer 无法在资源有限的情况下支持长序列处理和大批量。
+
+\hspace{0.2cm}
+
+为了解决这个问题，最近出现了许多提高计算效率的高效 Transformer模型。
+
+一类工作侧重于注意力矩阵的稀疏化,它通过将自注意力限制在预定义稀疏模式指定的位置来提高 Transformer 的效率。但是，当重要的标记相关性在多跳之外时，与全注意力相比，利用稀疏性可能会牺牲模型表达能力。
+
+另一类工作通过通过在注意力结构上引入低秩假设，对$n\times n$矩阵乘法进行近似，第一行工作避免通过各种近似值显式计算 n × n 矩阵，例如通过核化的点积计算~\cite{wang2020linformer}或随机投影~\cite{peng2021random}。~\cite{choromanski2020rethinking} 指出softmax结构与高斯核密切相关，差别仅为对角矩阵的乘法，因为当展开平方的欧氏距离时，成对的点积自然出现。Self-Attention和高斯核之间联系紧密，高斯核的形式可将注意力分配给不同的元素。与softmax函数相比，高斯核可以自动执行与softmax相同的归一化操作。
+
+\hspace{0.2cm}
+
+然而，由于对Self-Attention的近似存在很大挑战，所以上述改进的计算效率常会牺牲模型的表达能力。更严重的是，许多近似算法引入了额外注意力矩阵假设，如经典的Linfomer~\cite{wang2020linformer} 或仅对softmax操作进行的近似只在固定范围内成立~\cite{choromanski2020rethinking} 。
+
+为了进一步探索不同方法对于Self-Attention的计算效率和表现性能的影响，我们在本学期的“数值分析”课程项目中对Cosformer~\cite{zhen2022cosformer}，LARA\cite{pmlr-v162-zheng22b}，Skyformer~\cite{chen2021skyformer} 和 MEGA~\cite{ma2023mega} 这四种Self-Attention 的快速计算模型进行了复现，并实际测量了其长序列建模表现，以及在训练和推理过程中的性能。
+
+\hspace{0.2cm}
+
+Cosformer 是一种线性Transformer的新变体， 它基于 softmax attention 的两个关键属性：一是注意力矩阵的非负性，二是可以集中注意力矩阵的分布的非线性重加权方案。作为其线性替代品，Cosformer 通过线性运算符和基于余弦的距离重新加权机制来满足这些属性。
+具体来说，它通过在计算相似性分数之前将特征传递给 ReLU 激活函数来强制执行非负属性。通过这种方式，它鼓励模型避免聚合负相关的上下文信息。此外，它采用 cos 重新加权方案来稳定注意力权重。这有助于模型放大局部相关性，这些相关性通常包含更多与自然语言任务相关的信息。由于托勒密定理，Cosformer的注意力可以精确地分解为线性形式,
+它可以在随意和交叉注意中实现与普通Transformer相当或更好的精度。
+
+\hspace{0.2cm}
+
+LARA（线性随机注意力）是随机特征注意力（RFA）\cite{peng2021random}和随机注意力（RA）的结合。其中RFA通过将指数核线性化为随机特征图的点积来近似 softmax 注意力，尽管实现了线性时间和空间复杂度，但整体上是有偏估计。RA通过每个查询独有的分布构造正随机特征，可以对查询特定信息进行更细粒度的处理，并大大提高近似保真度，是softmax的无偏估计，但具有二次复杂度。LARA应用多重重要性采样 \cite{veach1995optimally} 来概括 RFA 的重要性抽样公式，针对不同的查询自适应地近似 softmax 注意力，保留 RA 的查询特定属性。同时，由于这些建议在所有查询之间共享，它继承了 RFA 中有效的计算重用并实现了线性复杂度。
+
+\hspace{0.2cm}
+
+Skyformer将\textit{nystrom}方法\cite{williams2001using, drineas2005nystrom}应用于非半正定的经验高斯核矩阵（一般情况下查询矩阵不等于键矩阵），
+具体实现方式是将核化注意力得分矩阵提升为一个大型半正定矩阵，其中包含未归一化的注意力得分矩阵作为非对角块。
+Skyformer在核化注意力的谱范数下具有较小的矩阵近似误差，且显著能加速计算。
+
+\hspace{0.2cm}
+
+MEGA（门控移动平均注意力）是一种配备移动平均线的门控注意机制。截至2023年6月6日，MEGA 在 Papers With Code - LRA 榜单\footnote{\url{https://paperswithcode.com/sota/long-range-modeling-on-lra}}上为五项任务均值的 SOTA。其关键思想是利用经典的指数移动平均 (EMA) 方法，将归纳偏差纳入跨时间步维度的注意力机制。 EMA 捕获随时间呈指数衰减的局部依赖性，并已广泛用于时间序列数据建模。它引入了具有可学习系数的多维阻尼形式的 EMA，随后通过将 EMA 与单头门控注意的变体相结合来开发配备移动平均线的门控注意机制\cite{hua2022transformer}。从理论上讲，MEGA的单头门控注意力与最常用的多头注意力一样具有表现力。
+
+\hspace{0.2cm}
+
+在本学期“数值分析”的课程项目中，我们主要完成了以下内容
+\begin{enumerate}
+    \item 学习了 CosFormer，LARA，SkyFormer 和 MEGA 这 4 种模型的基本原理。
+    \item 复现了 4 种 Self-Attention 快速计算模型，实验代码开源于 \url{https://github.com/Btlmd/AttentionAccelerations}。
+    \item 在 Long Range Arena 基准上验证了这 4 种模型的长序列建模能力。
+    \item 实际测量并分析了这 4 种模型在不同长序列建模任务的训练和推理过程中的加速效果。
+\end{enumerate}
+

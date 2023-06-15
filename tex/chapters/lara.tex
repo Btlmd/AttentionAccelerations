@@ -1,0 +1,55 @@
+\subs{LARA（线性随机注意力）}
+\label{subsec:lara}
+
+本节我们介绍了一种改进的 softmax 注意力估计器—LARA。受随机特征注意力(RFA)\cite{peng2021random,}和随机注意力(RA)\cite{choromanski2020rethinking} 之间的差异的启发，LARA 通过采用多个提议来推广 RFA 的重要性采样公式。这种策略不仅可以以更细粒度的方式捕捉查询信息，还允许模型以特定于查询的方式估计 softmax 注意力。并且Lara可以实现计算重用，借助自标准化重要性采样可以实现线性复杂度计算。
+
+\subsubs{多提议重要性采样}
+\label{ssec:lara_mis}
+RA和RFA都旨在估计期望 $\mathbb{E}_{p_n(\omega)}\left[f_n(\omega)\right]
+ =  \mathbb{E}_{p_n(\omega)}\!\!\left[\frac{\xi(q_n,\omega)^\top \!\sum_{m=1}^M\xi(k_m, \omega) v_{m}^{\top}}{ \xi(q_n,\omega)^\top \!\sum_{m'=1}^M\xi(k_{m'}, \omega)}\right]\!
+ = \mathsf{SoftmaxAttn}(q_n, K,V)$
+它们之间的主要区别在于RA为每个查询从不同的分布中采样，而RFA对所有查询使用相同的提议分布。为了兼顾两者的优势，LARA采用一组$C$（$C \ll N$）提议分布$\{{q_c(\omega)}\}_{c=1}^C$进行估计，其中每个提议分布依赖于一部分查询。
+
+这种策略不仅能够以更细粒度的方式处理查询信息，还允许模型以查询特定的方式估计softmax注意力，这是RA的关键优势。具体而言，由于每个查询都有几个提议可用，并且这些提议可能相互提供互补的信息，可以通过多重重要性采样\cite{veach1995optimally}将它们组合起来。对于每个查询，MIS估计的形式如下（注意：这里假设每个提议分布只抽取一个样本。更一般的处理方式允许从每个提议分布抽取任意数量的样本）：
+\begin{equation}
+\mathbb{E}_{p_n(\omega)}\left[f_n(\omega)\right] \approx \sum_{c=1}^C \alpha_{nc}(\omega_c) \frac{p_n(\omega_c)}{q_c(\omega_c)}f_n(\omega_c)\label{eqn:lara:mis}
+\end{equation}
+其中 $\omega_c \sim q_c(\omega)$，$c=1,\dots,C$，$\{{\alpha_{nc}(\cdot)}\}_{c=1}^C$ 是\emph{加权函数}。如果对于任意 $\omega$ 都有 $\sum_{c=1}^C \alpha_{nc}(\omega) = 1$，那么由\cite{veach1995optimally}可知，MIS估计是无偏的。
+% \footnote{严格来说，为了使MIS估计无偏，还需要加权函数对于任何使 $p_n(\omega) = 0$ 的 $\omega$ 都为零，尽管在LARA的设置中这是显然成立的。}
+直观地说，MIS首先使用每个提议的单独重要性采样估计值，然后根据\emph{查询特定}的加权函数对它们进行平均。
+
+理想情况下，第 $n$ 个加权函数集合 $\{{\alpha_{nc}(\cdot)}\}_{c=1}^C$ 应专门用于处理第 $n$ 个查询。为实现这一目标，加权函数应对应于相应查询的最优函数（即最小化估计方差）。最优加权函数的形式如下：
+\begin{equation}
+\alpha^*_{nc}(\omega_c) =
+\frac{q_c(\omega_c)}{\sum_{c'=1}^C q_{c'}(\omega_c)} + q_c(\omega_c)\left(r_{nc}(\omega_c) - \sum_{c=1}^C\frac{q_c(\omega_c)}{\sum_{c'=1}^C q_{c'}(\omega_c)}r_{nc}(\omega_c)\right).
+\end{equation}
+这里 $r_{nc}(\cdot)$ 大致与 $q_c(\cdot)$ 与查询特定最优提议之间的接近程度成正比。直观地说，最优加权函数由两项组成。第一项与查询无关，第二项是查询特定的校正项。校正项由 $r_{nc}(\cdot)$ 与其由 $q_c(\cdot)$ 加权的平均值之间的差异定义；因此，如果 $r_{nc}(\cdot)$ 较大，则校正项将为正，推动第 $c$ 个提议的权重更高，反之亦然。
+
+在大多数情况下，应用最优加权函数是不可行的，因为 $r_{nc}(\cdot)$ 的闭式形式是不可用的。因此，LARA通过以下形式来近似最优加权函数：
+\begin{equation}
+\alpha_{nc}(\omega_c) = \frac{q_c(\omega_c)}{\sum_{c'=1}^C q_{c'}(\omega_c)} + r'_{nc} - \frac{1}{C}\sum_{c=1}^Cr'_{nc},\label{eqn:lara:opt_weighting_function}
+\end{equation}
+其中 $r'_{nc}$ 衡量了提议 $q_c$ 对第 $n$ 个查询的偏好程度。为了可行性，LARA将 $r'_{nc}$ 实现为第 $n$ 个查询与第 $c$ 个查询子集的表示之间的归一化相似性。还将提议密度 $q_c(\omega)$ 和 $r'_{nc}$ 的计算分离，以使与查询无关和查询特定项的贡献可以相互独立。请注意，由于 $\sum_{c=1}^C \alpha_{nc}(\omega) = 1$，Eq.\ref{eqn:lara:opt_weighting_function}仍然确保了MIS估计的无偏性（或一致性）。
+
+\subsubs{实现线性时间和空间复杂度}
+\label{ssec:lara_snis}
+根据MIS估计器（\ref{eqn:lara:mis}），在每个提议下的键-值统计信息可以预先计算一次，然后在所有查询中重复使用。这意味着RFA中的计算重用是可行的，从而实现了线性复杂度。
+
+现在唯一剩下的问题是MIS估计器仍然需要对每个查询明确评估密度 
+$p_n(\omega)=\sum_{m=1}^M \pi_{m} \mathcal{N}(\omega; q_n + k_m, \mathbf{I})$，
+这会导致二次复杂度。这是因为 $p_n(\omega)$ 是一个具有 $M$ 个分量的高斯混合，总共需要 $O(NM)$ 次计算。LARA展示了一种自标准化版本的MIS，可以将复杂度进一步降低到线性。混合密度 $p_n(\omega)$ 可以等价地表示为
+\begin{equation}
+\textstyle{
+p_n(\omega) = \frac{\mathcal{N}(\omega;0,\mathbf{I}) \xi(q_n,\omega)^\top \sum_{m=1}^M \xi(k_{m}, \omega)}{\sum_{m'=1}^M \exp\left(q_n^\top k_{m'}\right)} = \frac{\tilde{p}n(\omega)}{Z_p}
+}
+\end{equation}
+我们的关键观察是，现在分子包含了一个线性化的随机映射点积，可以预先计算并在所有查询中重复使用，而分母类似于常规softmax注意力中的归一化常数，并且只能在二次时间内计算。幸运的是，如果采用\emph{自标准化}估计器，
+\begin{equation}
+\label{eqn:lara}
+\textstyle{
+\mathbb{E}{p_n(\omega)}\left[f_n(\omega)\right] \approx
+\frac{\sum_{c=1}^C\alpha_{nc}(\omega_c)\frac{\tilde{p}n(\omega_c)}{q_c(\omega_c)} f_n(\omega_c)}{\sum{c=1}^C\alpha_{nc}(\omega_c)\frac{\tilde{p}n(\omega_c)}{q_c(\omega_c)}} \
+= \mathsf{LARA}\left(q_{n},K,V\right)
+}
+\end{equation}
+所得到的估计器是一致的，并且具有与RFA类似的线性复杂度。

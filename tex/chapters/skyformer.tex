@@ -1,0 +1,64 @@
+\subs{Skyformer}
+这一节我们介绍 Skyformer 近似计算加速的原理。
+\label{subsec:skyformer}
+\subsubs{核化注意力}
+\label{sec:kernel_attn}
+Softmax注意力的一个显著优点是允许元素仅和序列中的少量重要元素发送关联，
+高斯核函数可以起到类似的作用。高斯核函数的表达式为$\kappa(Q_i,  K_j) := \exp \left(-\|Q_i - K_j\|^2 / 2 \right)$。
+通过这个表达式，对于查询中的元素$i$，当$K_j$接近于$Q_i$时，高斯核赋予元素$j$较大的注意力。
+基于距离的加权分配正是核方法强大的一个重要原因。
+核化注意力的形式也导致了自动归一化。
+
+核化注意力使用高斯核函数 $\kappa$ 替代了普通自注意力中的softmax结构，新的注意力模型定义如下：
+\begin{equation}
+\text{Kernelized-Attention}(Q,K,V) = C V = \kappa\left(\frac{Q}{p^{1/4}}, \frac{K}{p^{1/4}} \right) V,
+\end{equation}
+其中$n$乘$n$矩阵$C$定义为核化注意力得分矩阵$\kappa(Q / p^{1/4}, K / p^{1/4})$，而 $V$ 则是一般意义下的值向量。
+
+由此，新的注意力模型可以用未归一化的注意力矩阵$A$表示为
+\begin{equation*}
+\text{Kernelized-Attention}(Q,K,V) = \left( D_Q^{-1/2} \cdot A \cdot D_K^{-1/2} \right) V,
+\end{equation*}
+其中$D_Q$（对应$D_K$）是一个对角矩阵，其元素为$(D_Q)_{ii} = \exp\left( \frac{\|Q_i\|^2}{\sqrt{p}} \right)$ ，相应地，$(D_K)_{ii} = \exp \left( \frac{\|K_i\|^2}{\sqrt{p}} \right)$），$\forall i \in \mathbb{N}$。
+Skyformer指出，核化注意力模型可以看作原始自注意力的一种变体，它将矩阵$A$归一化为$D^{-1} A$的形式。
+这种归一化使得核化注意力具有比自注意力更合理的条件数，从而有助于模型训练的稳定性。
+
+\subsubs{改进的\textit{Nystrom}方法}
+\label{sec:nystrom}
+
+Skyformer将\textit{Nystrom}方法应用于非对称的经验核矩阵$B$。该核矩阵是由任意半正定核$\phi(\cdot, \cdot)$构造而成的。
+
+具体而言，给定两个不同的$n$行$p$列设计矩阵$Q$和$K$，$B$中第$i$行第$j$列的元素$b_{ij}$等于$\phi(Q_i, K_j)$，其中$Q_i$是$Q$的第$i$行，$K_j$是$K$的第$j$行。
+如果取用 $\phi$ 为高斯核，我们就可以得到对上述高斯核矩阵$C = \kappa(Q / p^{1/4}, K / p^{1/4})$的近似，从而完成对核化注意力$C V$输出的低秩近似。
+
+接下来的问题就是如何去计算经验核矩阵 $B$。由于$B$不是半正定矩阵，第一步是将该矩阵补充成一个半正定矩阵$\bar{B}$
+\begin{equation}
+\label{eqn:concat}
+\bar{B} = \phi \left(
+\begin{pmatrix}
+Q \
+K
+\end{pmatrix},
+\begin{pmatrix}
+Q \
+K
+\end{pmatrix} \right).
+\end{equation}
+然后，通过Nystorm方法，用$\tilde{\bar{B}}$近似$\bar{B}$：
+\begin{align}
+\label{eqn:tilde_bar}
+\tilde{\bar{B}} = \bar{B} S (S^{T} \bar{B}\textbf{S})^{\dagger} \textbf{S}^{T}\bar{B},
+\end{align}
+其中$S$是一个由均匀子采样矩阵构成的$2n$行$d$列矩阵，$(\cdot)^\dagger$ 表示Moore-Penrose广义逆。
+
+最终，Skyformer 对 $B$ 的近似结果为
+\begin{align}
+\label{eqn:approx}
+\tilde{B} = (I, 0) \tilde{\bar{B}} (0, I)^T.
+\end{align}
+Skyformer 指出，由于下述不等式成立，
+\begin{align*}
+|B - \tilde{B}| = |(I, 0) (\bar{B} - \tilde{\bar{B}}) (0, I)^T| \leq |\bar{B} - \tilde{\bar{B}}|,
+\end{align*}
+原始矩阵$B$可以很好地被$\tilde{B}$近似，从而将近似非半正定矩阵$B$的任务归结为对半正定矩阵$\bar{B}$进行良好的近似。
+Skyformer 指出，从经验来看，核矩阵$\bar{B}$中的特征值通常快速衰减，从而在长尾部分存在许多较小的特征值。此时，低秩矩阵在谱范数意义下可以很好地近似原始矩阵，如 $\bar{B}$的截断奇异值分解可以很好地近似$\bar{B}$。

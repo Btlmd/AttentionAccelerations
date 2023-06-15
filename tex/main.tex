@@ -1,0 +1,237 @@
+\documentclass[twoside]{article}
+\usepackage[UTF8]{ctex} 
+\usepackage{geometry}
+ \geometry{
+ a4paper,
+ total={170mm,257mm},
+ left=14.5mm,
+ top=26mm,
+ bottom=22mm,
+ right=14.5mm
+ }
+ \usepackage{graphicx}
+ \usepackage{titling}
+\usepackage{ifthen}
+ \title{Transformer中Self-Attention的快速计算}
+\author{刘明道\ 滕嘉彦}
+
+\usepackage{fancyhdr}
+\usepackage[normalem]{ulem}
+\usepackage{cmbright}
+\usepackage{titlesec}
+\usepackage{sectsty}
+\usepackage{xstring}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[RO]{
+    \ifthenelse{\equal{\thepage}{1}}{
+    }{
+    \rule[0.66\baselineskip]{0.31\textwidth}{0.4pt}\hspace{0.02\textwidth}
+    
+    \vspace{-30pt}
+    \thepage
+    }
+}
+
+\fancyhead[LO]{
+    \ifthenelse{\equal{\thepage}{1}}{
+        \songti \zihao{-5}“数值分析”期末项目总结报告（2023 年春季学期）
+        \vskip 2pt
+        \hrule width0.9\headwidth\vskip1pt\hrule width0.9\headwidth
+    }{\
+    \heiti \zihao{-5}
+    \theauthor ：\thetitle
+    }
+}
+\fancyhead[LE]{
+\hspace{0.02\textwidth}\rule[0.65\baselineskip]{0.63\textwidth}{0.4pt}
+
+\vspace{-30pt}
+\thepage
+}
+
+% 设置页眉线的位置和粗细
+\renewcommand{\headrulewidth}{0pt} % 去除默认的页眉线
+\renewcommand{\footrulewidth}{0pt} % 去除默认的页脚线
+
+% defs 
+\newcommand{\printtitle}[1]{
+    \vspace{10pt}
+    \noindent{\heiti\zihao{3} #1}
+}
+\newcommand{\printauthor}[1]{
+    \vspace{6pt}
+    \noindent{\fangsong\zihao{4}\scalebox{0.66}[1] #1}
+    \vspace{6pt}
+}
+\newcommand{\printcontact}[1]{{\songti\fontsize{10pt}{12pt}\selectfont\raggedright #1}}
+\newcommand{\intro}[2]{
+  \vspace{0.5\baselineskip}
+  \noindent
+  {\heiti \zihao{5} #1}
+  {\songti \zihao{5} #2}
+  \vspace{0.2\baselineskip}
+}
+
+% section
+\titleformat{\section}[hang]{\normalfont\raggedright}{{\heiti\zihao{4} \thesection}}{1em}{} % 居左对齐
+\titlespacing{\section}{0pt}{3pt}{4pt} 
+
+% subsection
+\titleformat{\subsection}{\normalfont\heiti\zihao{4}}{\thesubsection}{1em}{}
+\titlespacing{\subsection}{0pt}{0.15\baselineskip}{0.15\baselineskip}
+
+\usepackage{indentfirst} 
+\setlength{\parindent}{2em} % 首行缩进2字符
+\usepackage{setspace} 
+\singlespacing % 单倍行距
+
+\newcommand{\s}[1]{\section{\normalfont #1}}
+\newcommand{\subs}[1]{\subsection{\normalfont #1}}
+\newcommand{\subsubs}[1]{\subsubsection{\normalfont #1}}
+
+% reference
+\usepackage[style=ieee]{biblatex}
+\addbibresource{references.bib}
+\defbibheading{refheading}[参考文献]{%
+  \section*{#1}% 以 \section 格式打印章节标题
+}
+
+% copy from mega
+\usepackage{hyperref}       % hyperlinks
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue,
+}
+\usepackage{enumitem}
+\usepackage{bm}
+\usepackage{url}            % simple URL typesetting
+\usepackage{wrapfig,lipsum,booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{fontspec}
+\usepackage{microtype}      % microtypography
+%\usepackage{todonotes}      % [disable]
+
+\usepackage{caption}
+\usepackage{subcaption}
+
+\usepackage{amssymb}
+% \usepackage[ruled,lined]{algorithm2e}
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{framed,graphicx}
+%\usepackage[lofdepth,lotdepth]{subfig}
+\usepackage{amsthm}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{bigints}
+% For Tables
+\usepackage{multirow}
+\usepackage{pifont}
+\usepackage{xspace}
+%\usepackage{arydshln}
+
+\theoremstyle{plain}
+\newcounter{theoremcounter}
+\newtheorem{theorem}[theoremcounter]{定理}
+\newtheorem{lemma}[theoremcounter]{引理}
+\newtheorem{corollary}{推论}[theoremcounter]
+\newcommand{\op}{\mathsf{op}}
+
+%\theoremstyle{definition}
+%\newcounter{definitioncounter}
+%\newtheorem{definition}[definitioncounter]{Definition}
+\newcommand{\xmark}{\ding{55}\xspace}%
+\newcommand{\argmax}{\operatornamewithlimits{argmax}}
+\newcommand{\argmin}{\operatornamewithlimits{argmin}}
+%\newcommand{\inf}{\operatornamewithlimits{inf}}
+%\newcommand{\sup}{\operatornamewithlimits{sup}}
+
+\newcommand{\FIXME}[1]{\textcolor{red}{[#1]}}
+\newcommand{\gn}[1]{\textcolor{magenta}{\bf\small [#1 --GN]}}
+\newcommand{\xk}[1]{\textcolor{green}{\bf\small [#1 --XK]}}
+\newcommand{\cz}[1]{\textcolor{orange}{\bf\small [#1 --CZ]}}
+\newcommand{\jh}[1]{\textcolor{brown}{\bf\small [#1 --JH]}}
+
+% % copy fromm skyformer
+% \usepackage{hyperref}    % hyperlinks
+% \usepackage{url}            % simple URL typesetting
+% \usepackage{booktabs}       % professional-quality tables
+% \usepackage{amsfonts}       % blackboard math symbols
+% \usepackage{nicefrac}       % compact symbols for 1/2, etc.
+% \usepackage{microtype}      % microtypography
+
+% \usepackage[table,dvipsnames]{xcolor}
+% \usepackage{url}
+
+
+\renewcommand*{\ttdefault}{cmtt}
+\usepackage{graphicx}               % Include graph
+\usepackage{tabularx}               % Better table formatting
+\newcolumntype{C}{>{\centering\arraybackslash}X}
+\usepackage{multirow}               % Multi-row in tables
+\usepackage{diagbox}                % Diagonal line in tables
+\usepackage{hhline}                 % Draw double line in tables
+\usepackage{color}                  % Text and background color
+\usepackage{amsmath}                % Formula
+\usepackage{amssymb}                % Formula
+\usepackage{mathtools}              % Formula
+\usepackage{enumitem}               % Better itemize environment
+\usepackage{verbatim}               % comment env
+\usepackage{multirow}
+\newcommand{\bs}{\boldsymbol}
+\newcommand{\ola}{\overleftarrow}
+\newcommand{\ora}{\overrightarrow}
+\newcommand{\ccgreen}{\cellcolor{Emerald!10}}
+\newcommand{\ccdgreen}{\cellcolor{Emerald!20}}
+\newcommand{\ccddgreen}{\cellcolor{Emerald!35}}
+\newcommand{\x}{\checkmark}
+
+
+\newtheorem{definition}{Definition} % definition in amsmath
+\usepackage{ulem} % for delete line
+
+\usepackage{bigstrut}
+
+\begin{document}
+
+\printtitle{\thetitle}
+
+\printauthor{\theauthor}
+
+\printcontact{（计算机系，学号：2020011156，2020011109，手机号：18747201120，18801384297）}
+
+\songti\zihao{5}
+
+\intro{摘\quad 要：}{Transformer 模型有很强的长序列建模能力，但Self-Attention操作对序列长度的平方时间复杂度限制了 Transformer 模型对长序列的处理速度。我们将讨论4种针对 Self-Attention 机制的加速方法，分别是Cosformer，LARA，Skyformer和 MEGA。实验部分，我们在 Long Range Arena~\cite{tay2021long} 基准上验证了以上方法的长序列建模能力，探索了方法中参数的作用效果，测量了不同方法在训练和推理过程中的加速效果，并将其进行对比，讨论不同算法的优势和劣势。我们将实验的代码开源于 \url{https://github.com/Btlmd/AttentionAccelerations}。}
+
+\intro{关键词：}{Self-Attention机制；计算加速}
+\vspace{-10pt}
+
+\s{引言} 
+    \input{chapters/introduction}
+\s{概念回顾} 
+    \input{chapters/background}
+\s{现有方法介绍}
+
+在这一节，我们介绍 CosFormer（\ref{subsec:cosformer}），LARA（\ref{subsec:lara}），Skyformer（\ref{subsec:skyformer}） 和 MEGA（\ref{subsec:mega}） 的基本原理。
+
+    \input{chapters/cosformer}
+    \input{chapters/lara}
+    \input{chapters/skyformer}
+    \input{chapters/mega}
+    
+\s{实验}
+    \input{chapters/experiments}
+
+\s{总结}
+    \input{chapters/conclusion}
+
+\microtypesetup{protrusion=false}
+\printbibliography[heading=refheading]
+
+\end{document}
